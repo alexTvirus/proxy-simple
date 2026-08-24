@@ -121,6 +121,7 @@ app.use((req, res) => {
 
   const realUrlRequest = req.headers['real-url-request'];
   if (realUrlRequest) {
+    // Giữ nguyên protocol mà client gửi (http hoặc https)
     target = realUrlRequest;
     try {
       const parsed = url.parse(realUrlRequest);
@@ -133,7 +134,11 @@ app.use((req, res) => {
     resourceURL = resourceURL.replace(/^\/+/, '');
 
     maindomain = req.headers['realip'] ? req.headers['realip'] : req.headers['host'];
-    target = 'https://' + maindomain + '/' + resourceURL;
+    
+    // Mặc định dùng http cho IP nội bộ, https cho domain
+    const isIP = /^\d+\.\d+\.\d+\.\d+/.test(maindomain.split(':')[0]);
+    const protocol = isIP ? 'http://' : 'https://';
+    target = protocol + maindomain + '/' + resourceURL;
   }
 
   console.log('Proxying →', target);
@@ -146,7 +151,7 @@ app.use((req, res) => {
   proxyOptions.method = req.method;
   proxyOptions.headers['x-request-id'] = Date.now();
 
-  // Xóa header không cần gửi lên upstream
+  // Xóa các header không cần
   delete proxyOptions.headers['real-url-request'];
   delete proxyOptions.headers['x-country'];
   delete proxyOptions.headers['x-forwarded-for'];
