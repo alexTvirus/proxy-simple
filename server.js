@@ -8,6 +8,29 @@ const bodyParser = require('body-parser');
 
 const app = express();
 
+// ===== CORS middleware (phải đặt trước bodyParser và các route khác) =====
+app.use((req, res, next) => {
+  // Cho phép mọi origin (kể cả origin 'null')
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Cho phép các method thường dùng
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+  // Cho phép các header mà client gửi lên (kể cả custom header như real-url-request)
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, real-url-request, realip, *'
+  );
+  // Cho phép credentials nếu cần (khi dùng * thì không set credentials)
+  // res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Xử lý preflight
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
+  next();
+});
+
 // Parse raw body for binary/proxy use-cases
 app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '2mb' }));
 // Also accept common content types so proxy works with forms / json
@@ -68,12 +91,29 @@ function proxyResponse(clientResponse, serverResponse) {
   if (serverResponse.headers['transfer-encoding'] === 'chunked') {
     delete serverResponse.headers['transfer-encoding'];
   }
-  clientResponse.writeHead(serverResponse.statusCode, serverResponse.headers);
+
+  // Đảm bảo response từ upstream cũng có CORS header
+  // (ghi đè nếu upstream không có hoặc có giá trị khác)
+  const headers = { ...serverResponse.headers };
+  headers['Access-Control-Allow-Origin'] = '*';
+  headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD';
+  headers['Access-Control-Allow-Headers'] =
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, real-url-request, realip, *';
+
+  // Xóa header có thể gây conflict
+  delete headers['content-encoding']; // đôi khi cần giữ, tùy trường hợp
+
+  clientResponse.writeHead(serverResponse.statusCode, headers);
   serverResponse.pipe(clientResponse, { end: true });
 }
 
 function error(res) {
-  res.writeHead(400);
+  res.writeHead(400, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
+    'Access-Control-Allow-Headers':
+      'Origin, X-Requested-With, Content-Type, Accept, Authorization, real-url-request, realip, *',
+  });
   res.end();
 }
 
@@ -123,5 +163,5 @@ app.use((req, res) => {
 });
 
 app.listen(3000, () => {
-        console.log('Server is up on 3000')
-    });
+  console.log('Server is up on 3000');
+});
