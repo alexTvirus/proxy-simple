@@ -8,7 +8,7 @@ const bodyParser = require('body-parser');
 
 const app = express();
 
-// ===== CORS middleware (phải đặt đầu tiên) =====
+// ===== CORS =====
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
@@ -17,11 +17,9 @@ app.use((req, res, next) => {
     'Origin, X-Requested-With, Content-Type, Accept, Authorization, real-url-request, realip, *'
   );
 
-  // Xử lý preflight
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
-
   next();
 });
 
@@ -57,7 +55,8 @@ function proxyRequest(req) {
       connector.end();
     } else if (req.body && typeof req.body === 'object' && !(req.body instanceof Buffer)) {
       const payload =
-        req.is('application/json') || (req.headers['content-type'] && req.headers['content-type'].includes('json'))
+        req.is('application/json') ||
+        (req.headers['content-type'] && req.headers['content-type'].includes('json'))
           ? JSON.stringify(req.body)
           : new URLSearchParams(req.body).toString();
       connector.write(payload);
@@ -85,7 +84,6 @@ function proxyResponse(clientResponse, serverResponse) {
     delete serverResponse.headers['transfer-encoding'];
   }
 
-  // Đảm bảo luôn có CORS header
   const headers = { ...serverResponse.headers };
   headers['Access-Control-Allow-Origin'] = '*';
   headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD';
@@ -107,12 +105,7 @@ function error(res, err) {
     'Access-Control-Allow-Headers':
       'Origin, X-Requested-With, Content-Type, Accept, Authorization, real-url-request, realip, *',
   });
-  res.end(
-    JSON.stringify({
-      error: 'Proxy failed',
-      message: message,
-    })
-  );
+  res.end(JSON.stringify({ error: 'Proxy failed', message }));
 }
 
 app.use((req, res) => {
@@ -120,11 +113,12 @@ app.use((req, res) => {
   let maindomain;
 
   const realUrlRequest = req.headers['real-url-request'];
+
   if (realUrlRequest) {
     // Giữ nguyên protocol mà client gửi (http hoặc https)
-    target = realUrlRequest;
+    target = realUrlRequest.trim();
     try {
-      const parsed = url.parse(realUrlRequest);
+      const parsed = url.parse(target);
       maindomain = parsed.host || parsed.hostname;
     } catch (e) {
       maindomain = req.headers['host'];
@@ -133,12 +127,16 @@ app.use((req, res) => {
     let resourceURL = req.url.replace(/\/\.netlify\/functions\/server\/?/gi, '');
     resourceURL = resourceURL.replace(/^\/+/, '');
 
-    maindomain = req.headers['realip'] ? req.headers['realip'] : req.headers['host'];
-    
-    // Mặc định dùng http cho IP nội bộ, https cho domain
-    const isIP = /^\d+\.\d+\.\d+\.\d+/.test(maindomain.split(':')[0]);
-    const protocol = isIP ? 'http://' : 'https://';
-    target = protocol + maindomain + '/' + resourceURL;
+    maindomain = req.headers['realip'] || req.headers['host'];
+
+    // ===== Logic quan trọng =====
+    // Nếu là IP nội bộ hoặc port 3000 → mặc định dùng HTTP
+    const hostname = maindomain.split(':')[0];
+    const isPrivateIP =
+      /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/i.test(hostname);
+
+    const protocol = isPrivateIP ? 'http://' : 'https://';
+    target = protocol + maindomain + (resourceURL ? '/' + resourceURL : '');
   }
 
   console.log('Proxying →', target);
@@ -151,7 +149,7 @@ app.use((req, res) => {
   proxyOptions.method = req.method;
   proxyOptions.headers['x-request-id'] = Date.now();
 
-  // Xóa các header không cần
+  // Xóa header không cần gửi đi
   delete proxyOptions.headers['real-url-request'];
   delete proxyOptions.headers['x-country'];
   delete proxyOptions.headers['x-forwarded-for'];
