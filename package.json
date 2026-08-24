@@ -1,0 +1,28 @@
+{
+  "name": "netlify-express",
+  "version": "1.0.0",
+  "description": "Express.js proxy on modern Netlify Functions (no netlify-lambda)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "netlify dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neverendingqs/netlify-express.git"
+  },
+  "keywords": [
+    "netlify",
+    "express.js",
+    "serverless"
+  ],
+  "author": "neverendingqs",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2",
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

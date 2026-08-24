@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+.netlify/
+dist/
+functions/   # old netlify-lambda output
+.idea/
+*.log
