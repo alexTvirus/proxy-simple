@@ -109,34 +109,21 @@ function error(res, err) {
 }
 
 app.use((req, res) => {
-  let target;
-  let maindomain;
-
   const realUrlRequest = req.headers['real-url-request'];
 
-  if (realUrlRequest) {
-    // Giữ nguyên protocol mà client gửi (http hoặc https)
-    target = realUrlRequest.trim();
-    try {
-      const parsed = url.parse(target);
-      maindomain = parsed.host || parsed.hostname;
-    } catch (e) {
-      maindomain = req.headers['host'];
-    }
-  } else {
-    let resourceURL = req.url.replace(/\/\.netlify\/functions\/server\/?/gi, '');
-    resourceURL = resourceURL.replace(/^\/+/, '');
+  // Không có real-url-request → trả về message status 200
+  if (!realUrlRequest) {
+    return res.status(200).send('missing real-url-request');
+  }
 
-    maindomain = req.headers['realip'] || req.headers['host'];
+  let target = realUrlRequest.trim();
+  let maindomain;
 
-    // ===== Logic quan trọng =====
-    // Nếu là IP nội bộ hoặc port 3000 → mặc định dùng HTTP
-    const hostname = maindomain.split(':')[0];
-    const isPrivateIP =
-      /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/i.test(hostname);
-
-    const protocol = isPrivateIP ? 'http://' : 'https://';
-    target = protocol + maindomain + (resourceURL ? '/' + resourceURL : '');
+  try {
+    const parsed = url.parse(target);
+    maindomain = parsed.host || parsed.hostname;
+  } catch (e) {
+    maindomain = req.headers['host'];
   }
 
   console.log('Proxying →', target);
@@ -149,7 +136,6 @@ app.use((req, res) => {
   proxyOptions.method = req.method;
   proxyOptions.headers['x-request-id'] = Date.now();
 
-  // Xóa header không cần gửi đi
   delete proxyOptions.headers['real-url-request'];
   delete proxyOptions.headers['x-country'];
   delete proxyOptions.headers['x-forwarded-for'];
