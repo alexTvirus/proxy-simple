@@ -86,35 +86,40 @@ function proxyRequest(req) {
 
 function proxyResponse(clientResponse, serverResponse) {
   if (serverResponse instanceof Error) {
-    return error(clientResponse);
+    console.error('Proxy upstream error:', serverResponse.message || serverResponse);
+    return error(clientResponse, serverResponse);
   }
+
   if (serverResponse.headers['transfer-encoding'] === 'chunked') {
     delete serverResponse.headers['transfer-encoding'];
   }
 
-  // Đảm bảo response từ upstream cũng có CORS header
-  // (ghi đè nếu upstream không có hoặc có giá trị khác)
+  // Giữ CORS trên mọi response
   const headers = { ...serverResponse.headers };
   headers['Access-Control-Allow-Origin'] = '*';
   headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD';
   headers['Access-Control-Allow-Headers'] =
     'Origin, X-Requested-With, Content-Type, Accept, Authorization, real-url-request, realip, *';
 
-  // Xóa header có thể gây conflict
-  delete headers['content-encoding']; // đôi khi cần giữ, tùy trường hợp
-
   clientResponse.writeHead(serverResponse.statusCode, headers);
   serverResponse.pipe(clientResponse, { end: true });
 }
 
-function error(res) {
-  res.writeHead(400, {
+function error(res, err) {
+  const message = err ? (err.message || String(err)) : 'Proxy error';
+  console.error('Returning error to client:', message);
+
+  res.writeHead(502, {   // dùng 502 Bad Gateway thay vì 400 cho đúng nghĩa
+    'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
     'Access-Control-Allow-Headers':
       'Origin, X-Requested-With, Content-Type, Accept, Authorization, real-url-request, realip, *',
   });
-  res.end();
+  res.end(JSON.stringify({
+    error: 'Proxy failed',
+    message: message
+  }));
 }
 
 app.use((req, res) => {
